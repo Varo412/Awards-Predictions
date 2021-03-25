@@ -99,18 +99,6 @@ async function renderer(data, username) {
     console.log("Setting up configuration");
     const MAX_ROW = 5;
     const MAX_COL = 5;
-    let matrix = new Array(MAX_ROW);
-    for (let i = 0; i < matrix.length; i++) {
-        matrix[i] = new Array(MAX_COL);
-    }
-    let c = 0;
-    let s;
-    for (let i = 0; i < MAX_ROW; i++) {
-        for (let j = 0; j < MAX_COL; j++) {
-            matrix[i][j] = data[c++]
-            if (matrix[i][j]) s = c - 1;
-        }
-    }
 
     const CARD_W = 370;
     const CARD_H = 190;
@@ -127,82 +115,91 @@ async function renderer(data, username) {
 
 
     console.log("Preparing rendering...");
+    let promises = [];
+
     try {
-        let pic = await Jimp.read(pictureRoute);
+        let pic = Jimp.read(pictureRoute);
+        promises.push(pic);
+
+
+        let fontTitle = Jimp.loadFont(`${appRoot}/assets/fonts/render_title.fnt`);
+        let fontCategory = Jimp.loadFont(`${appRoot}/assets/fonts/card_title.fnt`);
+        let fontName = Jimp.loadFont(`${appRoot}/assets/fonts/card_nominee.fnt`);
+        let fontDesc = Jimp.loadFont(`${appRoot}/assets/fonts/card_movie.fnt`);
+        promises.push(fontTitle, fontCategory, fontName, fontDesc,);
+        let algo = await Promise.all(promises);
+        pic = algo[0];
+        fontTitle = algo[1];
+        fontCategory = algo[2];
+        fontName = algo[3];
+        fontDesc = algo[4];
+
+
         if (pic) console.log("Template loaded");
         else {
             console.err("Error at loading template");
             return false;
         }
 
-        let fontTitle = await Jimp.loadFont(`${appRoot}/assets/fonts/render_title.fnt`);
-        let fontCategory = await Jimp.loadFont(`${appRoot}/assets/fonts/card_title.fnt`);
-        let fontName = await Jimp.loadFont(`${appRoot}/assets/fonts/card_nominee.fnt`);
-        let fontDesc = await Jimp.loadFont(`${appRoot}/assets/fonts/card_movie.fnt`);
-        if (fontName) console.log("Fonts loaded");
-        else {
-            console.err("Error at loading font:", Jimp.FONT_SANS_64_WHITE)
-            return false;
-        }
-
+        let i = -1;
         console.log("Embedding items...")
-        for (let c = 0; c < MAX_COL; c++) {
-            for (let r = 0; r < MAX_ROW; r++) {
-                if (matrix[c][r]) {
+        for (const vote of data) {
+            i++;
+            let c = i % MAX_ROW;
+            let r = Math.floor(i / MAX_COL);
 
-                    /* embedding thumbnail */
-                    const X_POSITION = X_OFFSET + (CARD_W + CARDS_X_DISTANCE) * r + THUMBNAIL_X_OFFSET;
-                    const Y_POSITION = Y_OFFSET + (CARD_H + CARDS_Y_DISTANCE) * c + THUMBNAIL_Y_OFFSET;
-                    let thumbnail;
-                    try {
-                        if (matrix[c][r].voted.pic === '#') {
-                            thumbnail = await Jimp.read(BLANK_THUMBNAIL);
-                        } else {
-                            thumbnail = await Jimp.read(matrix[c][r].voted.pic);
-                        }
-                        if (thumbnail) await thumbnail.scaleToFit(THUMBNAIL_W, THUMBNAIL_H, Jimp.HORIZONTAL_ALIGN_CENTER)
-                        await pic.composite(thumbnail, X_POSITION, Y_POSITION);
-                    } catch (e) {
-                        console.error(e, matrix[c][r].voted);
-                    }
-
-                    /* embedding text */
-                    const TEXT_X_OFFSET = 6;
-                    const TEXT_TOP_PADDING = 5;
-                    const CARD_TEXT_PROPORTION = 5;
-                    const THUMBNAIL_RENDERED_WIDTH = ((matrix[c][r].voted.pic !== '#' && thumbnail)
-                        ? thumbnail.bitmap.width : THUMBNAIL_W);
-                    const TEXT_X_POSITION = THUMBNAIL_RENDERED_WIDTH + X_POSITION + TEXT_X_OFFSET;
-
-                    const MAX_CARD_TEXT_WIDTH = CARD_W - TEXT_X_OFFSET * 2 - THUMBNAIL_RENDERED_WIDTH - THUMBNAIL_X_OFFSET;
-
-                    //category
-                    await pic.print(fontCategory, TEXT_X_POSITION, Y_POSITION + TEXT_TOP_PADDING, {
-                        text: sanitizeEmbeddedText(matrix[c][r].category),
-                        alignmentX: Jimp.HORIZONTAL_ALIGN_CENTER,
-                        alignmentY: Jimp.VERTICAL_ALIGN_TOP
-                    }, MAX_CARD_TEXT_WIDTH, (CARD_H / CARD_TEXT_PROPORTION) - TEXT_TOP_PADDING)
-
-                    //name
-                    await pic.print(fontName, TEXT_X_POSITION, Y_POSITION + TEXT_TOP_PADDING + CARD_H / CARD_TEXT_PROPORTION, {
-                        text: sanitizeEmbeddedText(matrix[c][r].voted.name),
-                        alignmentX: Jimp.HORIZONTAL_ALIGN_CENTER,
-                        alignmentY: Jimp.VERTICAL_ALIGN_MIDDLE
-                    }, MAX_CARD_TEXT_WIDTH, (3 * CARD_H / CARD_TEXT_PROPORTION) - 2 * CARD_TEXT_PROPORTION)
-
-                    //related movie
-                    if (matrix[c][r].voted.name !== matrix[c][r].voted.movie)
-                        await pic.print(fontDesc, TEXT_X_POSITION, Y_POSITION + 4 * CARD_H / CARD_TEXT_PROPORTION + TEXT_TOP_PADDING, {
-                            text: sanitizeEmbeddedText(matrix[c][r].voted.movie),
-                            alignmentX: Jimp.HORIZONTAL_ALIGN_CENTER,
-                            alignmentY: Jimp.VERTICAL_ALIGN_BOTTOM
-                        }, MAX_CARD_TEXT_WIDTH, (CARD_H / CARD_TEXT_PROPORTION) - 3 * TEXT_TOP_PADDING)
+            /* embedding thumbnail */
+            const X_POSITION = X_OFFSET + (CARD_W + CARDS_X_DISTANCE) * c + THUMBNAIL_X_OFFSET;
+            const Y_POSITION = Y_OFFSET + (CARD_H + CARDS_Y_DISTANCE) * r + THUMBNAIL_Y_OFFSET;
+            let thumbnail;
+            try {
+                if (vote.voted.pic === '#') {
+                    thumbnail = await Jimp.read(BLANK_THUMBNAIL);
+                } else {
+                    thumbnail = await Jimp.read(vote.voted.pic);
                 }
+                if (thumbnail) await thumbnail.scaleToFit(THUMBNAIL_W, THUMBNAIL_H, Jimp.HORIZONTAL_ALIGN_CENTER)
+                await pic.composite(thumbnail, X_POSITION, Y_POSITION);
+            } catch (e) {
+                console.error(e, vote.voted);
             }
+
+            /* embedding text */
+            const TEXT_X_OFFSET = 6;
+            const TEXT_TOP_PADDING = 5;
+            const CARD_TEXT_PROPORTION = 5;
+            const THUMBNAIL_RENDERED_WIDTH = ((vote.voted.pic !== '#' && thumbnail)
+                ? thumbnail.bitmap.width : THUMBNAIL_W);
+            const TEXT_X_POSITION = THUMBNAIL_RENDERED_WIDTH + X_POSITION + TEXT_X_OFFSET;
+
+            const MAX_CARD_TEXT_WIDTH = CARD_W - TEXT_X_OFFSET * 2 - THUMBNAIL_RENDERED_WIDTH - THUMBNAIL_X_OFFSET;
+
+            //category
+            await pic.print(fontCategory, TEXT_X_POSITION, Y_POSITION + TEXT_TOP_PADDING, {
+                text: sanitizeEmbeddedText(vote.category),
+                alignmentX: Jimp.HORIZONTAL_ALIGN_CENTER,
+                alignmentY: Jimp.VERTICAL_ALIGN_TOP
+            }, MAX_CARD_TEXT_WIDTH, (CARD_H / CARD_TEXT_PROPORTION) - TEXT_TOP_PADDING)
+
+            //name
+            await pic.print(fontName, TEXT_X_POSITION, Y_POSITION + TEXT_TOP_PADDING + CARD_H / CARD_TEXT_PROPORTION, {
+                text: sanitizeEmbeddedText(vote.voted.name),
+                alignmentX: Jimp.HORIZONTAL_ALIGN_CENTER,
+                alignmentY: Jimp.VERTICAL_ALIGN_MIDDLE
+            }, MAX_CARD_TEXT_WIDTH, (3 * CARD_H / CARD_TEXT_PROPORTION) - 2 * CARD_TEXT_PROPORTION)
+
+            //related movie
+            if (vote.voted.name !== vote.voted.movie)
+                await pic.print(fontDesc, TEXT_X_POSITION, Y_POSITION + 4 * CARD_H / CARD_TEXT_PROPORTION + TEXT_TOP_PADDING, {
+                    text: sanitizeEmbeddedText(vote.voted.movie),
+                    alignmentX: Jimp.HORIZONTAL_ALIGN_CENTER,
+                    alignmentY: Jimp.VERTICAL_ALIGN_BOTTOM
+                }, MAX_CARD_TEXT_WIDTH, (CARD_H / CARD_TEXT_PROPORTION) - 3 * TEXT_TOP_PADDING)
         }
 
         /* embedding render title */
-        const renderTitle = `${sanitizePossessive(username)} ${getOrdinal(data[s].awardEvent.edition)} ${data[s].awardEvent.name} predictions`;
+        let sample = data.find(e => e);
+        const renderTitle = `${sanitizePossessive(username)} ${getOrdinal(sample.awardEvent.edition)} ${sample.awardEvent.name} predictions`;
         await pic.print(fontTitle, X_OFFSET, 0,
             {
                 text: sanitizeEmbeddedText(renderTitle),

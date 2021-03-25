@@ -2,7 +2,7 @@
   "DBuri": "localhost",
   "DBPort": 27017,
   "DBSchema": "AwardsPredictions",
-  "create-drop": true,
+  "create-drop": false,
   "serverURI": "localhost",
   "serverPort": 3000
 }
